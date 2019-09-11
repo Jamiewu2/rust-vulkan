@@ -1,0 +1,11 @@
+[package]
+name = "vulkan-hello-world"
+version = "0.1.0"
+authors = ["Jamie Wu <jamiewu2@illinois.edu>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+vulkano = "0.14.0"
+winit = "0.19.3"
