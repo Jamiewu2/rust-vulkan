@@ -2,8 +2,9 @@ use winit::EventsLoop;
 use winit::WindowBuilder;
 use winit::{Event, WindowEvent};
 use winit::dpi::LogicalSize;
-use vulkano::instance::{Instance, InstanceExtensions, ApplicationInfo, Version};
+use vulkano::instance::{Instance, InstanceExtensions, ApplicationInfo, Version, layers_list};
 use std::sync::Arc;
+use vulkano::instance::debug::{DebugCallback, MessageTypes};
 
 const WIDTH: u32 = 800;
 const HEIGHT: u32 = 600;
@@ -12,18 +13,29 @@ const HEIGHT: u32 = 600;
 #[allow(unused)]
 struct HelloTriangleApp {
     instance: Arc<Instance>,
+    debug_callback: Option<DebugCallback>,
     events_loop: EventsLoop,
 }
+
+//Vulkan standard validation layers init
+const VALIDATION_LAYERS: &[&str; 1] = &["VK_LAYER_LUNARG_standard_validation"];
+
+#[cfg(all(debug_assertions))]
+const ENABLE_VALIDATION_LAYERS: bool = true;
+#[cfg(not(debug_assertions))]
+const ENABLE_VALIDATION_LAYERS: bool = false;
 
 // associated functions on the struct
 impl HelloTriangleApp {
     //capital Self = type, HelloTriangleApp in this case
     fn init() -> Self {
         let instance = Self::init_instance();
+        let debug_callback = Self::setup_debug_callback(&instance);
         let events_loop = Self::init_window();
 
         Self {
             instance,
+            debug_callback,
             events_loop
         }
     }
@@ -50,9 +62,52 @@ impl HelloTriangleApp {
             engine_version: Some(Version { major: 1, minor: 0, patch: 0 }),
         };
 
-        let required_extensions = vulkano_win::required_extensions();
-        Instance::new(Some(&app_info), &required_extensions, None)
-            .expect("failed to create Vulkan instance")
+        let required_extensions = Self::get_required_extensions();
+
+        if ENABLE_VALIDATION_LAYERS && Self::check_validation_layer_support() {
+            Instance::new(Some(&app_info), &required_extensions, VALIDATION_LAYERS.iter().cloned())
+                .expect("failed to create Vulkan instance")
+        } else {
+            Instance::new(Some(&app_info), &required_extensions, None)
+                .expect("failed to create Vulkan instance")
+        }
+    }
+
+    fn check_validation_layer_support() -> bool {
+        let validation_layers = layers_list().unwrap().map(|layer| layer.name().to_owned()).collect::<Vec<String>>();
+
+        return VALIDATION_LAYERS.iter()
+            .all(|layer_name| validation_layers.contains(&layer_name.to_string()))
+    }
+
+    fn get_required_extensions() -> InstanceExtensions {
+        let mut required_extensions = vulkano_win::required_extensions();
+        if ENABLE_VALIDATION_LAYERS {
+            // TODO!: this should be ext_debug_utils (_report is deprecated), but that doesn't exist yet in vulkano
+            required_extensions.ext_debug_report = true;
+        }
+
+        return required_extensions;
+    }
+
+    fn setup_debug_callback(instance: &Arc<Instance>) -> Option<DebugCallback> {
+        if !ENABLE_VALIDATION_LAYERS {
+            return None
+        }
+
+        let msg_types = MessageTypes {
+            error: true,
+            warning: true,
+            performance_warning: true,
+            information: false,
+            debug: true,
+        };
+
+        let callback = DebugCallback::new(&instance, msg_types, |msg| {
+            println!("validation layer: {:?}", msg.description);
+        }).ok();
+
+        return callback;
     }
 
     //&mut self = self: &mut Self
