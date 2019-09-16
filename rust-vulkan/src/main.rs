@@ -2,7 +2,7 @@ use winit::EventsLoop;
 use winit::WindowBuilder;
 use winit::{Event, WindowEvent};
 use winit::dpi::LogicalSize;
-use vulkano::instance::{Instance, InstanceExtensions, ApplicationInfo, Version, layers_list};
+use vulkano::instance::{Instance, InstanceExtensions, ApplicationInfo, Version, layers_list, PhysicalDevice};
 use std::sync::Arc;
 use vulkano::instance::debug::{DebugCallback, MessageTypes};
 
@@ -11,10 +11,31 @@ const HEIGHT: u32 = 600;
 
 // a rust struct is basically a Kotlin data class, or more generally a named Tuple
 #[allow(unused)]
-struct HelloTriangleApp {
+struct HelloTriangleApp<'a> {
+    //vulkan
     instance: Arc<Instance>,
     debug_callback: Option<DebugCallback>,
+    physical_device: PhysicalDevice<'a>,
+
+    //winit
     events_loop: EventsLoop,
+}
+
+struct QueueFamilyIndices {
+    graphics_family: Option<u32>,
+}
+
+impl QueueFamilyIndices {
+    fn new() -> Self {
+        let a: Option<u32> = None;
+        Self {
+            graphics_family: a
+        }
+    }
+
+    fn is_complete(&self) -> bool {
+        return self.graphics_family.is_some()
+    }
 }
 
 //Vulkan standard validation layers init
@@ -26,16 +47,18 @@ const ENABLE_VALIDATION_LAYERS: bool = true;
 const ENABLE_VALIDATION_LAYERS: bool = false;
 
 // associated functions on the struct
-impl HelloTriangleApp {
+impl<'a> HelloTriangleApp<'a> {
     //capital Self = type, HelloTriangleApp in this case
     fn init() -> Self {
         let instance = Self::init_instance();
         let debug_callback = Self::setup_debug_callback(&instance);
+        let physical_device = Self::get_physical_device(&instance);
         let events_loop = Self::init_window();
 
         Self {
             instance,
             debug_callback,
+            physical_device,
             events_loop
         }
     }
@@ -108,6 +131,37 @@ impl HelloTriangleApp {
         }).ok();
 
         return callback;
+    }
+
+    fn get_physical_device(instance: &Arc<Instance>) -> PhysicalDevice {
+        let physical_device = PhysicalDevice::enumerate(&instance)
+            .find(|device| Self::is_physical_device_suitable(device))
+            .expect("failed to find a suitable GPU!");
+
+        println!("Using device: {} (type: {:?})", physical_device.name(), physical_device.ty());
+        return physical_device;
+    }
+
+    fn is_physical_device_suitable(device: &PhysicalDevice) -> bool {
+        let indices = Self::find_queue_families(device);
+        return indices.is_complete();
+    }
+
+
+    fn find_queue_families(device: &PhysicalDevice) -> QueueFamilyIndices {
+        let mut indices = QueueFamilyIndices::new();
+
+        for (i, queue_family) in device.queue_families().enumerate() {
+            if queue_family.supports_graphics() {
+                indices.graphics_family = Some(i as u32);
+            }
+
+            if indices.is_complete() {
+                break;
+            }
+        }
+
+        return indices;
     }
 
     //&mut self = self: &mut Self
