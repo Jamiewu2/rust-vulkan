@@ -11,30 +11,31 @@ const HEIGHT: u32 = 600;
 
 // a rust struct is basically a Kotlin data class, or more generally a named Tuple
 #[allow(unused)]
-struct HelloTriangleApp<'a> {
+struct HelloTriangleApp {
     //vulkan
     instance: Arc<Instance>,
     debug_callback: Option<DebugCallback>,
-    physical_device: PhysicalDevice<'a>,
+    physical_device_index: usize, // can't store PhysicalDevice directly (lifetime issues)
 
     //winit
     events_loop: EventsLoop,
 }
 
 struct QueueFamilyIndices {
-    graphics_family: Option<u32>,
+    graphics_family: i32
 }
 
 impl QueueFamilyIndices {
+    const NOT_INITIALIZED: i32 = -1;
+
     fn new() -> Self {
-        let a: Option<u32> = None;
         Self {
-            graphics_family: a
+            graphics_family: Self::NOT_INITIALIZED
         }
     }
 
     fn is_complete(&self) -> bool {
-        return self.graphics_family.is_some()
+        return self.graphics_family != Self::NOT_INITIALIZED
     }
 }
 
@@ -47,18 +48,18 @@ const ENABLE_VALIDATION_LAYERS: bool = true;
 const ENABLE_VALIDATION_LAYERS: bool = false;
 
 // associated functions on the struct
-impl<'a> HelloTriangleApp<'a> {
+impl HelloTriangleApp {
     //capital Self = type, HelloTriangleApp in this case
     fn init() -> Self {
         let instance = Self::init_instance();
         let debug_callback = Self::setup_debug_callback(&instance);
-        let physical_device = Self::get_physical_device(&instance);
+        let physical_device_index = Self::get_physical_device_index(&instance);
         let events_loop = Self::init_window();
 
         Self {
             instance,
             debug_callback,
-            physical_device,
+            physical_device_index,
             events_loop
         }
     }
@@ -133,13 +134,13 @@ impl<'a> HelloTriangleApp<'a> {
         return callback;
     }
 
-    fn get_physical_device(instance: &Arc<Instance>) -> PhysicalDevice {
+    fn get_physical_device_index(instance: &Arc<Instance>) -> usize {
         let physical_device = PhysicalDevice::enumerate(&instance)
             .find(|device| Self::is_physical_device_suitable(device))
             .expect("failed to find a suitable GPU!");
 
         println!("Using device: {} (type: {:?})", physical_device.name(), physical_device.ty());
-        return physical_device;
+        return physical_device.index();
     }
 
     fn is_physical_device_suitable(device: &PhysicalDevice) -> bool {
@@ -153,7 +154,7 @@ impl<'a> HelloTriangleApp<'a> {
 
         for (i, queue_family) in device.queue_families().enumerate() {
             if queue_family.supports_graphics() {
-                indices.graphics_family = Some(i as u32);
+                indices.graphics_family = i as i32;
             }
 
             if indices.is_complete() {
