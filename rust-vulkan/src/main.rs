@@ -2,9 +2,10 @@ use winit::EventsLoop;
 use winit::WindowBuilder;
 use winit::{Event, WindowEvent};
 use winit::dpi::LogicalSize;
-use vulkano::instance::{Instance, InstanceExtensions, ApplicationInfo, Version, layers_list, PhysicalDevice};
+use vulkano::instance::{Instance, InstanceExtensions, ApplicationInfo, Version, layers_list, PhysicalDevice, QueueFamily};
 use std::sync::Arc;
 use vulkano::instance::debug::{DebugCallback, MessageTypes};
+use vulkano::device::{Device, DeviceExtensions, Queue, Features};
 
 const WIDTH: u32 = 800;
 const HEIGHT: u32 = 600;
@@ -16,6 +17,8 @@ struct HelloTriangleApp {
     instance: Arc<Instance>,
     debug_callback: Option<DebugCallback>,
     physical_device_index: usize, // can't store PhysicalDevice directly (lifetime issues)
+    device: Arc<Device>,
+    graphics_queue: Arc<Queue>,
 
     //winit
     events_loop: EventsLoop,
@@ -54,12 +57,15 @@ impl HelloTriangleApp {
         let instance = Self::init_instance();
         let debug_callback = Self::setup_debug_callback(&instance);
         let physical_device_index = Self::get_physical_device_index(&instance);
+        let (device, graphics_queue) = Self::create_logical_device(&instance, physical_device_index);
         let events_loop = Self::init_window();
 
         Self {
             instance,
             debug_callback,
             physical_device_index,
+            device,
+            graphics_queue,
             events_loop
         }
     }
@@ -163,6 +169,33 @@ impl HelloTriangleApp {
         }
 
         return indices;
+    }
+
+    //I'm not sure I understand why i have to explicitly define the lifetime here?
+    fn get_graphics_family_from_physical_device<'a>(physical_device: &'a PhysicalDevice) -> QueueFamily<'a> {
+        let indices = Self::find_queue_families(&physical_device);
+        let queue_family = physical_device.queue_families().nth(indices.graphics_family as usize).unwrap();
+        return queue_family
+    }
+
+    fn create_logical_device(instance: &Arc<Instance>, physical_device_index: usize) -> (Arc<Device>, Arc<Queue>) {
+        let physical_device = PhysicalDevice::from_index(instance, physical_device_index).unwrap();
+        let graphics_family = Self::get_graphics_family_from_physical_device(&physical_device);
+
+        let features = Features::none();
+        let extensions = DeviceExtensions::none();
+
+        //priorities, list of pairs, is option some iterable? I don't get how this would work otherwise
+        //actually, the code is looking for anything that can implement IntoIterator<Item = (QueueFamily<'a>, f32)>
+        //so, option works
+        let queue_families = Some((graphics_family, 1.0));
+
+        let (device, mut queues_iter) = Device::new(physical_device, &features, &extensions, queue_families)
+            .expect("Couldn't build logical device!");
+
+        //only 1 queue for now
+        let queues = queues_iter.next().unwrap();
+        return (device, queues)
     }
 
     //&mut self = self: &mut Self
